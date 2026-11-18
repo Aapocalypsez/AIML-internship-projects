@@ -125,7 +125,7 @@ cd frontend && npm run dev    # Terminal 2
 # Viewer: http://localhost:5173 | API: http://localhost:8000/docs
 ```
 
-## 📋 Documentation
+##  Documentation
 
 | Document | AIML-01 | AIML-02 |
 |----------|---------|---------|
