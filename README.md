@@ -1,10 +1,10 @@
-# 🎓 AIML Internship Projects — Atul Kumar
+#  AIML Internship Projects — Atul Kumar
 
 > Two end-to-end AI/ML projects built during my internship: a **real-time fraud detection platform** and an **AI-assisted medical imaging system**.
 
 ---
 
-## 📁 Repository Structure
+##  Repository Structure
 
 ```
 ├── AIML-01/    → Real-Time Financial Fraud Detection Platform
@@ -13,7 +13,7 @@
 
 ---
 
-## 🔍 AIML-01: Real-Time Financial Fraud Detection Platform
+##  AIML-01: Real-Time Financial Fraud Detection Platform
 
 An end-to-end ML platform that ingests financial transactions via **Kafka**, engineers leakage-safe features, scores them in real-time, and surfaces predictions through an interactive **Streamlit** dashboard.
 
@@ -44,18 +44,18 @@ Kafka Producer → Kafka Broker → Streaming Worker → FastAPI Scorer → Post
 
 ### Features
 
-- ⚡ Real-time transaction scoring via Kafka streaming pipeline
-- 🏪 Feast feature store with online/offline parity (max error: 5.68e-13)
-- 📊 Streamlit dashboard with live fraud alerts and analyst queue
-- 🔄 Automated drift detection and model retraining pipeline
-- 🧪 GraphSAGE GNN experiment (honestly documented — no ranking gain)
-- ☸️ Kubernetes deployment on Minikube with 9 services
+-  Real-time transaction scoring via Kafka streaming pipeline
+-  Feast feature store with online/offline parity (max error: 5.68e-13)
+-  Streamlit dashboard with live fraud alerts and analyst queue
+-  Automated drift detection and model retraining pipeline
+-  GraphSAGE GNN experiment (honestly documented — no ranking gain)
+-  Kubernetes deployment on Minikube with 9 services
 
 → **[Full Setup & Documentation](AIML-01/README.md)**
 
 ---
 
-## 🏥 AIML-02: Lumen — Medical Imaging and Diagnosis System
+##  AIML-02: Lumen — Medical Imaging and Diagnosis System
 
 A full-stack application for **chest X-ray classification** and **CT spleen segmentation** with an authenticated reviewer workflow, Grad-CAM explanations, and DICOM support.
 
@@ -95,20 +95,20 @@ React Viewer → FastAPI Backend → SQLite (Studies + Reviews)
 
 ### Features
 
-- 🩻 Multi-modal support: PNG, JPEG, DICOM (DX/CR), NIfTI CT, DICOM CT series
-- 🔬 Per-finding Grad-CAM heatmap explanations
-- 📐 Validation-fitted Platt calibration for probability estimates
-- 👤 Authenticated reviewer workflow with append-only audit trail
-- 📊 Subgroup analysis by recorded sex and age
-- 🐳 Pinned CPU Docker containers with Orthanc integration
+-  Multi-modal support: PNG, JPEG, DICOM (DX/CR), NIfTI CT, DICOM CT series
+-  Per-finding Grad-CAM heatmap explanations
+-  Validation-fitted Platt calibration for probability estimates
+-  Authenticated reviewer workflow with append-only audit trail
+-  Subgroup analysis by recorded sex and age
+-  Pinned CPU Docker containers with Orthanc integration
 
-> ⚠️ **For education only, not clinical use.**
+>  **For education only, not clinical use.**
 
 → **[Full Setup & Documentation](AIML-02/README.md)**
 
 ---
 
-## 🚀 Quick Start
+##  Quick Start
 
 Both projects require **Docker Desktop** and local infrastructure. See each project's README for detailed setup:
 
@@ -134,13 +134,13 @@ cd frontend && npm run dev    # Terminal 2
 | Model Details | [decisions.md](AIML-01/docs/decisions.md) | [MODEL_CARD.md](AIML-02/docs/MODEL_CARD.md) |
 | Reflection | [reflection.md](AIML-01/docs/reflection.md) | [REFLECTION_DRAFT.md](AIML-02/docs/REFLECTION_DRAFT.md) |
 
-## 🛠️ Development Environment
+##  Development Environment
 
 - **OS**: Windows 11
 - **GPU**: NVIDIA RTX 3050 Ti (4 GB VRAM)
 - **RAM**: 16 GB
 - **Python**: 3.11 (AIML-01) / 3.12 (AIML-02)
 
-## 📄 License
+##  License
 
 Educational project — not for production or clinical use.
