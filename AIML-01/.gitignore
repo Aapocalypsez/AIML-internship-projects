@@ -1,0 +1,44 @@
+# Data files
+data/raw/
+data/processed/
+*.csv
+*.parquet
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+
+# Environment
+.env
+*.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# MLflow artifacts (local)
+mlruns/
+mlartifacts/
+
+# Docker volumes
+postgres_data/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Generated Feast registry and snapshots
+feature_repo/data/
+data/tools/

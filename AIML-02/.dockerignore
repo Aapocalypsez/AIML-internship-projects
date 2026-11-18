@@ -1,0 +1,15 @@
+.git
+.venv
+.venv-ml
+.cache
+.dvc/cache
+reports
+videos
+outputs
+tools/workbook/node_modules
+frontend/node_modules
+frontend/dist
+data
+models
+.env
+**/__pycache__

@@ -1,0 +1,34 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports: ["127.0.0.1:8000:8000"]
+    volumes: ["./data/runtime:/app/data/runtime"]
+  viewer:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports: ["127.0.0.1:8080:80"]
+    depends_on: [api]
+  orthanc:
+    image: orthancteam/orthanc@sha256:06b8baab0c63cd58de5474a74b64096a82ea3f7eab2aa471e217cc48c9ae11bf
+    ports: ["127.0.0.1:8042:8042", "127.0.0.1:4242:4242"]
+    environment:
+      ORTHANC__NAME: Lumen-Research
+      ORTHANC__AUTHENTICATION_ENABLED: "true"
+      ORTHANC__REGISTERED_USERS: '{"research":"${ORTHANC_PASSWORD:?Set ORTHANC_PASSWORD in .env}"}'
+    volumes: ["orthanc-data:/var/lib/orthanc/db"]
+  importer:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "-m", "backend.orthanc_import"]
+    environment:
+      ORTHANC_URL: http://orthanc:8042
+      API_URL: http://api:8000
+      ORTHANC_PASSWORD: ${ORTHANC_PASSWORD:?Set ORTHANC_PASSWORD in .env}
+    volumes: ["./data/importer:/app/data"]
+    depends_on: [api, orthanc]
+volumes:
+  orthanc-data:

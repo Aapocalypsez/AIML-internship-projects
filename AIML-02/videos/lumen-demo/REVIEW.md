@@ -1,0 +1,7 @@
+# Delivery review — 8 November 2026
+
+Seven actual application states tell the sequence: sign-in, uploaded validation radiograph, finding overlay, acquired CT slice, imperfect predicted mask, versioned software-test review and measured results. No simulated clicks or invented predictions are used. This is a captioned still-capture walkthrough; Lumen_Live_Review.mp4 separately contains actual sequential interaction captures.
+
+Final check f0dee9e3-8e10-4128-a38a-2542233804c4 has zero runtime, layout and contrast errors. All 14 beat frames, six seam strips and the 360-pixel phone sheet were visually inspected. Captions and education notices remain inside the frame; hard cuts clearly separate genuine states. Desktop delivery is preferred: detailed application text is too small to inspect on a phone. The weakest shot is the dense results page, supported by the separately delivered report and editable presentation. A future narrated tutorial could zoom into individual controls; that treatment was not built here.
+
+The film_silent warning is retained deliberately for this captioned technical evidence walkthrough. Twelve-second static holds allow reading. No audio was recorded, mixed or heard. Alternative promotional storylines, generated medical imagery and simulated clinician approval were excluded. Final encoded duration and codec are measured separately in reports/demo_recording_result.json.

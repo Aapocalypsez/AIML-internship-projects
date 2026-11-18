@@ -1,0 +1,958 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fraud
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fraud-config
+  namespace: fraud
+data:
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  REDIS_HOST: redis
+  REDIS_PORT: '6379'
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: '5432'
+  POSTGRES_USER: fraud
+  POSTGRES_DB: fraud_detection
+  MLFLOW_TRACKING_URI: http://mlflow:5000
+  MODEL_NAME: fraud-detector
+  SCORER_URL: http://api:8000
+  FEAST_USAGE: 'False'
+  PYTHONUTF8: '1'
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: fraud-local-credentials
+  namespace: fraud
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: fraud_dev
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: fraud-shared
+spec:
+  capacity:
+    storage: 4Gi
+  accessModes:
+  - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ''
+  hostPath:
+    path: /data/fraud
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shared
+  namespace: fraud
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: ''
+  volumeName: fraud-shared
+  resources:
+    requests:
+      storage: 4Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres
+  namespace: fraud
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis
+  namespace: fraud
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: artifacts
+  namespace: fraud
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zookeeper
+  namespace: fraud
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      containers:
+      - name: zookeeper
+        image: confluentinc/cp-zookeeper:7.5.3
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: fraud-config
+        - secretRef:
+            name: fraud-local-credentials
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: '2'
+            memory: 256Mi
+        env:
+        - name: ZOOKEEPER_CLIENT_PORT
+          value: '2181'
+        - name: ZOOKEEPER_TICK_TIME
+          value: '2000'
+        ports:
+        - containerPort: 2181
+        readinessProbe:
+          tcpSocket: &id001
+            port: 2181
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          tcpSocket: *id001
+          initialDelaySeconds: 90
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 5
+      terminationGracePeriodSeconds: 30
+      enableServiceLinks: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+  namespace: fraud
+spec:
+  selector:
+    app: zookeeper
+  ports:
+  - port: 2181
+    targetPort: 2181
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+  namespace: fraud
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+      - name: kafka
+        image: confluentinc/cp-kafka:7.5.3
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: fraud-config
+        - secretRef:
+            name: fraud-local-credentials
+        resources:
+          requests:
+            cpu: 150m
+            memory: 128Mi
+          limits:
+            cpu: '2'
+            memory: 768Mi
+        env:
+        - name: KAFKA_BROKER_ID
+          value: '1'
+        - name: KAFKA_ZOOKEEPER_CONNECT
+          value: zookeeper:2181
+        - name: KAFKA_LISTENERS
+          value: PLAINTEXT://0.0.0.0:9092
+        - name: KAFKA_ADVERTISED_LISTENERS
+          value: PLAINTEXT://kafka:9092
+        - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+          value: '1'
+        - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+          value: '1'
+        - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+          value: '1'
+        - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+          value: 'true'
+        - name: KAFKA_HEAP_OPTS
+          value: -Xms128m -Xmx256m
+        ports:
+        - containerPort: 9092
+        readinessProbe:
+          tcpSocket: &id001
+            port: 9092
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          tcpSocket: *id001
+          initialDelaySeconds: 90
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 5
+      terminationGracePeriodSeconds: 30
+      enableServiceLinks: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: fraud
+spec:
+  selector:
+    app: kafka
+  ports:
+  - port: 9092
+    targetPort: 9092
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: fraud
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7.2-alpine
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: fraud-config
+        - secretRef:
+            name: fraud-local-credentials
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: '2'
+            memory: 512Mi
+        command:
+        - redis-server
+        - --appendonly
+        - 'yes'
+        ports:
+        - containerPort: 6379
+        readinessProbe:
+          tcpSocket: &id001
+            port: 6379
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          tcpSocket: *id001
+          initialDelaySeconds: 90
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 5
+        volumeMounts:
+        - name: redis
+          mountPath: /data
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: redis
+        persistentVolumeClaim:
+          claimName: redis
+      enableServiceLinks: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: fraud
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: fraud
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16-alpine
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: fraud-config
+        - secretRef:
+            name: fraud-local-credentials
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '2'
+            memory: 384Mi
+        env:
+        - name: POSTGRES_USER
+          value: fraud
+        - name: POSTGRES_DB
+          value: fraud_detection
+        ports:
+        - containerPort: 5432
+        readinessProbe:
+          tcpSocket: &id001
+            port: 5432
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          tcpSocket: *id001
+          initialDelaySeconds: 90
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 5
+        volumeMounts:
+        - name: postgres
+          mountPath: /var/lib/postgresql/data
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: postgres
+        persistentVolumeClaim:
+          claimName: postgres
+      enableServiceLinks: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: fraud
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+  namespace: fraud
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mlflow
+  template:
+    metadata:
+      labels:
+        app: mlflow
+    spec:
+      containers:
+      - name: mlflow
+        image: fraud-platform:local
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: fraud-config
+        - secretRef:
+            name: fraud-local-credentials
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '2'
+            memory: 768Mi
+        command:
+        - mlflow
+        - server
+        - --backend-store-uri
+        - postgresql://fraud:fraud_dev@postgres:5432/fraud_detection
+        - --default-artifact-root
+        - mlflow-artifacts:/
+        - --artifacts-destination
+        - /mlartifacts
+        - --host
+        - 0.0.0.0
+        - --port
+        - '5000'
+        - --workers
+        - '1'
+        ports:
+        - containerPort: 5000
+        readinessProbe:
+          httpGet: &id001
+            path: /health
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet: *id001
+          initialDelaySeconds: 90
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 5
+        volumeMounts:
+        - name: shared
+          mountPath: /app/data
+        - name: shared
+          mountPath: /app/feature_repo/data
+          subPath: feature_repo
+        - name: artifacts
+          mountPath: /mlartifacts
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: shared
+        persistentVolumeClaim:
+          claimName: shared
+      - name: artifacts
+        persistentVolumeClaim:
+          claimName: artifacts
+      enableServiceLinks: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow
+  namespace: fraud
+spec:
+  selector:
+    app: mlflow
+  ports:
+  - port: 5000
+    targetPort: 5000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: fraud
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+      - name: api
+        image: fraud-platform:local
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: fraud-config
+        - secretRef:
+            name: fraud-local-credentials
+        resources:
+          requests:
+            cpu: 200m
+            memory: 384Mi
+          limits:
+            cpu: '2'
+            memory: 1536Mi
+        ports:
+        - containerPort: 8000
+        readinessProbe:
+          httpGet: &id001
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet: *id001
+          initialDelaySeconds: 90
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 5
+        volumeMounts:
+        - name: shared
+          mountPath: /app/data
+        - name: shared
+          mountPath: /app/feature_repo/data
+          subPath: feature_repo
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: shared
+        persistentVolumeClaim:
+          claimName: shared
+      initContainers:
+      - name: wait-for-champion
+        image: fraud-platform:local
+        imagePullPolicy: IfNotPresent
+        command:
+        - python
+        - -c
+        - "import time,urllib.request\nwhile True:\n try:\n  urllib.request.urlopen('http://mlflow:5000/api/2.0/mlflow/registered-models/alias?name=fraud-detector&alias=champion',timeout=3);break\n\
+          \ except Exception: time.sleep(3)"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+      enableServiceLinks: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: fraud
+spec:
+  selector:
+    app: api
+  ports:
+  - port: 8000
+    targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: fraud
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+      - name: worker
+        image: fraud-platform:local
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: fraud-config
+        - secretRef:
+            name: fraud-local-credentials
+        resources:
+          requests:
+            cpu: 200m
+            memory: 384Mi
+          limits:
+            cpu: '2'
+            memory: 1536Mi
+        command:
+        - python
+        - -m
+        - src.streaming.worker
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - import os; os.kill(1, 0)
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        volumeMounts:
+        - name: shared
+          mountPath: /app/data
+        - name: shared
+          mountPath: /app/feature_repo/data
+          subPath: feature_repo
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: shared
+        persistentVolumeClaim:
+          claimName: shared
+      initContainers:
+      - name: wait-for-champion
+        image: fraud-platform:local
+        imagePullPolicy: IfNotPresent
+        command:
+        - python
+        - -c
+        - "import time,urllib.request\nwhile True:\n try:\n  urllib.request.urlopen('http://mlflow:5000/api/2.0/mlflow/registered-models/alias?name=fraud-detector&alias=champion',timeout=3);break\n\
+          \ except Exception: time.sleep(3)"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+      enableServiceLinks: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sink
+  namespace: fraud
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: sink
+  template:
+    metadata:
+      labels:
+        app: sink
+    spec:
+      containers:
+      - name: sink
+        image: fraud-platform:local
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: fraud-config
+        - secretRef:
+            name: fraud-local-credentials
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '2'
+            memory: 384Mi
+        command:
+        - python
+        - -m
+        - src.streaming.sink
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - import os; os.kill(1, 0)
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        volumeMounts:
+        - name: shared
+          mountPath: /app/data
+        - name: shared
+          mountPath: /app/feature_repo/data
+          subPath: feature_repo
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: shared
+        persistentVolumeClaim:
+          claimName: shared
+      enableServiceLinks: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dashboard
+  namespace: fraud
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: dashboard
+  template:
+    metadata:
+      labels:
+        app: dashboard
+    spec:
+      containers:
+      - name: dashboard
+        image: fraud-platform:local
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: fraud-config
+        - secretRef:
+            name: fraud-local-credentials
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: '2'
+            memory: 512Mi
+        command:
+        - python
+        - -m
+        - streamlit
+        - run
+        - src/dashboard/app.py
+        - --server.address
+        - 0.0.0.0
+        - --server.headless
+        - 'true'
+        - --browser.gatherUsageStats
+        - 'false'
+        ports:
+        - containerPort: 8501
+        readinessProbe:
+          httpGet: &id001
+            path: /_stcore/health
+            port: 8501
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet: *id001
+          initialDelaySeconds: 90
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 5
+        volumeMounts:
+        - name: shared
+          mountPath: /app/data
+        - name: shared
+          mountPath: /app/feature_repo/data
+          subPath: feature_repo
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: shared
+        persistentVolumeClaim:
+          claimName: shared
+      enableServiceLinks: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dashboard
+  namespace: fraud
+spec:
+  selector:
+    app: dashboard
+  ports:
+  - port: 8501
+    targetPort: 8501
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bootstrap
+  namespace: fraud
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: job
+        image: fraud-platform:local
+        imagePullPolicy: IfNotPresent
+        command:
+        - python
+        - -m
+        - scripts.bootstrap_runtime
+        envFrom:
+        - configMapRef:
+            name: fraud-config
+        - secretRef:
+            name: fraud-local-credentials
+        volumeMounts:
+        - name: shared
+          mountPath: /app/data
+        - name: shared
+          mountPath: /app/feature_repo/data
+          subPath: feature_repo
+        resources:
+          requests:
+            cpu: 100m
+            memory: 512Mi
+          limits:
+            cpu: '2'
+            memory: 2Gi
+      volumes:
+      - name: shared
+        persistentVolumeClaim:
+          claimName: shared
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: graph-risk
+  namespace: fraud
+spec:
+  schedule: 0 2 * * *
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 7200
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: job
+            image: fraud-platform-graph:local
+            imagePullPolicy: IfNotPresent
+            command:
+            - python
+            - -m
+            - src.graph.score_batch
+            envFrom:
+            - configMapRef:
+                name: fraud-config
+            - secretRef:
+                name: fraud-local-credentials
+            volumeMounts:
+            - name: shared
+              mountPath: /app/data
+            - name: shared
+              mountPath: /app/feature_repo/data
+              subPath: feature_repo
+            resources:
+              requests:
+                cpu: 100m
+                memory: 512Mi
+              limits:
+                cpu: '2'
+                memory: 3Gi
+          volumes:
+          - name: shared
+            persistentVolumeClaim:
+              claimName: shared
+          enableServiceLinks: false
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: drift-retraining
+  namespace: fraud
+spec:
+  schedule: 0 * * * *
+  suspend: false
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 7200
+      template:
+        spec:
+          restartPolicy: OnFailure
+          initContainers:
+          - name: wait-for-dependencies
+            image: fraud-platform:local
+            imagePullPolicy: IfNotPresent
+            command:
+            - python
+            - -c
+            - |
+              import socket, time, urllib.request
+              while True:
+                  try:
+                      for host, port in [('postgres', 5432), ('redis', 6379)]:
+                          with socket.create_connection((host, port), timeout=3):
+                              pass
+                      with urllib.request.urlopen('http://mlflow:5000/api/2.0/mlflow/registered-models/alias?name=fraud-detector&alias=champion', timeout=3):
+                          pass
+                      break
+                  except Exception:
+                      time.sleep(3)
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              limits:
+                cpu: 100m
+                memory: 64Mi
+          containers:
+          - name: job
+            image: fraud-platform:local
+            imagePullPolicy: IfNotPresent
+            command:
+            - python
+            - -m
+            - src.monitoring.run
+            # Full CPU training exhausted this 4 GiB node; run training separately.
+            envFrom:
+            - configMapRef:
+                name: fraud-config
+            - secretRef:
+                name: fraud-local-credentials
+            volumeMounts:
+            - name: shared
+              mountPath: /app/data
+            - name: shared
+              mountPath: /app/feature_repo/data
+              subPath: feature_repo
+            resources:
+              requests:
+                cpu: 100m
+                memory: 512Mi
+              limits:
+                cpu: '2'
+                memory: 3Gi
+          volumes:
+          - name: shared
+            persistentVolumeClaim:
+              claimName: shared
+          enableServiceLinks: false

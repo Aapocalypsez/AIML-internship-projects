@@ -1,0 +1,284 @@
+# Using and handing over the fraud detection prototype
+
+This guide describes the implementation in this repository. It is a local prototype
+trained on IEEE-CIS data. It provides a scoring service and an analyst review desk;
+it does not automatically connect to a bank, receive real payments, or block them.
+
+## Choose how someone will use it
+
+| Person | What they need | What they do |
+|---|---|---|
+| Evaluator or interviewer | Your running demonstration | Watch transactions arrive, inspect cases, and review the measured results |
+| Analyst | Access to the running dashboard | Review alerts, add notes, change status, and confirm labels |
+| Application developer | Access to the scoring service or Kafka | Send transaction events and consume risk results |
+| Developer receiving the project | Source, dependencies, saved artifacts, and demo data | Run their own local copy |
+
+The current localhost links work only on the computer running the deployment and
+port-forwards. Sending a localhost URL to someone on another computer does not
+give them access to your deployment. Screen sharing is sufficient for a remote
+demonstration. Shared use needs a separately configured, protected deployment or
+private access arrangement; this repository has not implemented that access layer.
+
+## Start the existing installation
+
+Use Docker Desktop in Linux-container mode. On the original laptop, open PowerShell:
+
+```powershell
+Set-Location 'C:\Users\atulk\Desktop\fraud detection'
+.\data\tools\minikube.exe start -p fraud-demo
+kubectl --context fraud-demo -n fraud get deployments
+kubectl --context fraud-demo -n fraud rollout status deployment/api --timeout=300s
+kubectl --context fraud-demo -n fraud rollout status deployment/dashboard --timeout=300s
+```
+
+The existing cluster contains the evaluated model. Starting it does not require
+training again. If this is a new installation rather than the existing cluster,
+follow the handover setup below.
+
+Keep this command running in one PowerShell terminal:
+
+```powershell
+kubectl --context fraud-demo -n fraud port-forward service/api 8001:8000
+```
+
+Keep this command running in another terminal:
+
+```powershell
+kubectl --context fraud-demo -n fraud port-forward service/dashboard 8502:8501
+```
+
+Open:
+
+- Dashboard: http://127.0.0.1:8502
+- Interactive API documentation: http://127.0.0.1:8001/docs
+- API health: http://127.0.0.1:8001/health
+
+Port-forward terminals are connections to the cluster. Closing them closes these
+browser connections; it does not stop the cluster. Restore the commands if their
+connection breaks after a pod restart.
+
+## Send transactions through the complete workflow
+
+The producer replays historical dataset rows. It is a demonstration source, not a
+live bank feed. After the November 1 resume, the first 2,000 rows have been
+replayed on the original installation. Send the next 100 rows:
+
+```powershell
+kubectl --context fraud-demo -n fraud exec deployment/api -- python -m src.streaming.producer --offset 2000 --limit 100 --speed 1000
+```
+
+On a fresh deployment, start with offset 0. Keep increasing the offset for later
+batches: after the example above, the next offset is 2100. `--limit` is the row
+count; `--speed 1000` compresses event-time gaps by a factor of 1,000. `--speed 0`
+sends as quickly as possible.
+
+The route is:
+
+```text
+Dataset replay -> Kafka -> scorer -> scored results / alerts
+                                     -> Postgres -> analyst dashboard
+```
+
+Operations shows total stored transactions. The review queue contains high-risk
+alerts and a 1% audit sample, not every transaction. It refreshes every five seconds.
+A small batch can produce few or no new review cases.
+
+An identical transaction ID and payload returns its cached prediction. Reusing an
+ID with changed data is rejected. Preserve event-time order for each account;
+older uncached events are rejected after its history has advanced. Do not run
+`--drift` against IDs already replayed with different amounts. The isolated drift
+demonstration described in README is the appropriate controlled experiment.
+
+## Use the analyst dashboard
+
+1. Select the **Review queue** tab and choose the case status filter.
+2. Use **Open transaction** to select a case.
+3. Inspect its fraud risk, alert threshold, account, and model version.
+4. Review the main XGBoost reasons and expand the transaction/features section.
+5. Inspect linked accounts when available. A shared identifier is evidence of a
+   connection, not proof of fraud.
+6. Choose `reviewing`, add a note, and press **Save case**.
+7. After investigation, press **Confirm fraud** or **Confirm legitimate**. This
+   stores a label and closes the case. A risk score alone is not a confirmed label.
+8. Select `closed` or `all` to see a closed case again.
+
+**Operations** shows scored, queued, and labeled counts and scorer health.
+**Drift reports** displays reports generated by monitoring. A report is not created
+just by opening the tab. The first explanation can take longer while the exact
+model version is loaded.
+
+This version has no general CSV-upload screen. Transactions enter through the
+producer/Kafka or the API.
+
+## Integrate another application
+
+There are two existing entry points:
+
+| Entry point | Existing behavior |
+|---|---|
+| `POST /score` | Returns the prediction directly; does not create a dashboard case |
+| Kafka `transactions.raw` | Worker scores, publishes results, and the sink stores them for review |
+
+For an API connectivity demonstration, open `/docs`, expand `POST /score`, choose
+**Try it out**, and submit this shape:
+
+```json
+{
+  "TransactionID": 900000000000001,
+  "TransactionDT": 20000000,
+  "TransactionAmt": 1499.0,
+  "pseudo_user_id": "api-demo-account-001",
+  "DeviceType": "mobile",
+  "P_emaildomain": "example.com"
+}
+```
+
+This is only a contract/connectivity example. The model was trained on hundreds
+of IEEE-CIS input features. Omitting them is accepted as missing data but does not
+demonstrate useful real-world fraud detection. The replay producer sends the
+dataset-derived fields used by this implementation. Do not send `isFraud` as an
+input feature.
+
+Useful response fields include `score`, `is_alert`, `threshold`, `model_version`,
+`duplicate`, and `latency_ms`. `score` is a model risk estimate, not certainty.
+The application calling the service decides whether to route a payment for review,
+request another check, or take another action. This project does not implement
+those payment actions.
+
+For a real integration, an engineer must:
+
+1. Define a transaction contract and map the application's fields to model inputs.
+2. Use stable, privacy-appropriate account identifiers and unique transaction IDs.
+3. Define one event-time convention. The current model uses seconds relative to
+   the dataset reference date; do not substitute Unix seconds without adapting the
+   preprocessing and retraining/evaluating the model.
+4. Replay available history chronologically before using history-based features,
+   or explicitly accept a cold account with no observed history.
+5. Preserve account order and implement retries with unchanged IDs and payloads.
+6. Handle validation/conflict responses and temporary service failures. A failure
+   to obtain a score must not be silently interpreted as a low-risk prediction.
+7. For dashboard review, publish compatible JSON to `transactions.raw`, keyed by
+   `pseudo_user_id`, and consume `transactions.scored` as needed. HTTP-only clients
+   need an additional persistence/publishing integration for cases.
+8. Train and evaluate on the intended application's representative, labeled data.
+   Many IEEE-CIS fields are anonymized; arbitrary payment data cannot simply be
+   renamed to those fields and inherit the saved model's measured accuracy.
+
+The current worker topology is single-partition/single-worker. Scaling requires
+additional ordering and rebalancing validation. The frozen graph covers historical
+accounts; it is not a continuously expanding live identity graph. Its measured
+prediction weight is zero because it did not improve validation ranking.
+
+## Give another developer a working copy
+
+Source control excludes generated data, model files, and feature-store snapshots.
+A repository clone alone is therefore not the existing ready-to-run installation.
+
+For the complete local demo, hand over:
+
+- The source repository, Docker files, `k8s`, `feature_repo` definitions, and docs.
+- Saved `data/processed/features` and `data/processed/graph` directories. They contain
+  the portable model, evaluated metadata, predictions, and graph checkpoint.
+- `feature_repo/data/*.parquet`, including `account_risk.parquet`.
+- `data/processed/training` for retraining and `data/processed/monitoring` for saved
+  drift reports. Include `data/processed/integration` if they need measured proof.
+- Access to the original dataset for replay/training. The recipient can obtain
+  `train_transaction.csv` and `train_identity.csv` from the dataset source and place
+  them under `data/raw`; do not assume the repository contains them.
+- A pinned source revision and README instructions. Do not copy `.venv`; create a
+  new environment on the recipient's computer.
+
+Model files support scoring; the dataset supports replay/training; database
+backups preserve cases/labels; Redis preserves live history/result caches; MLflow
+storage preserves registry history and artifacts. These are different resources.
+The setup below creates a new demo deployment and does not transfer old analyst
+cases, historical registry run IDs, or the live account-history cache.
+
+## Recipient setup using saved artifacts
+
+For a Windows recipient with Python 3.11 and Docker Desktop, open PowerShell in
+their copy of the project. Replace the original laptop path with their own path.
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r docker/requirements-runtime.txt
+docker compose up -d --build
+.\.venv\Scripts\python.exe scripts/health_check.py
+.\.venv\Scripts\python.exe -X utf8 -m scripts.bootstrap_runtime
+docker compose --profile app up -d
+```
+
+Wait for infrastructure health before bootstrap. Bootstrap materializes the saved
+account-risk snapshot, creates application tables, and registers the evaluated
+model as champion in the recipient's registry. Run it once for this fresh setup;
+it is not the everyday startup command and should not overwrite a deliberately
+chosen later champion. The saved graph artifacts and snapshot must agree.
+
+Open the Compose dashboard at http://127.0.0.1:8501 and API docs at
+http://127.0.0.1:8000/docs. These ports differ from the Minikube port-forwards.
+Send the first batch from that project's root:
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 -m src.streaming.producer --limit 1000 --speed 1000
+```
+
+The scoring/review runtime does not require PyTorch. Local graph training requires
+the extra graph dependencies in README; the graph Docker image installs its own.
+For Minikube instead, follow the README's `scripts/k8s_up.ps1` route after restoring
+the artifacts and installing Minikube/kubectl. It seeds data and runs bootstrap.
+Run one application deployment on a memory-constrained laptop.
+
+If no evaluated artifacts are supplied, follow README's **First model on a fresh
+clone** section to train, materialize, and evaluate them. That is a full setup task,
+not something to do during a short presentation.
+
+## Everyday operation and troubleshooting
+
+| Symptom | First checks |
+|---|---|
+| Browser cannot connect | Docker/cluster running; correct deployment ports; port-forward terminals still open |
+| Review queue empty | Operations count; status filter; enough events; worker and sink running; only alerts/audits enter queue |
+| Replayed transaction rejected | Reused ID with changed payload, or an old event arriving after newer account history |
+| Model/champion not found | Saved artifacts present; successful first bootstrap; correct MLflow registry environment |
+| Another computer cannot open localhost | Localhost refers to that other computer; no remote access has been configured |
+| Labels seem missing | Use `closed`/`all`; confirm you are viewing the same Compose or Minikube database |
+
+Minikube status and recent worker/sink logs:
+
+```powershell
+kubectl --context fraud-demo -n fraud get pods,jobs,cronjobs
+kubectl --context fraud-demo -n fraud logs deployment/worker --tail=50
+kubectl --context fraud-demo -n fraud logs deployment/sink --tail=50
+```
+
+Stop the original cluster while retaining its node data:
+
+```powershell
+.\data\tools\minikube.exe stop -p fraud-demo
+```
+
+For Compose, use `docker compose --profile app stop` and later
+`docker compose --profile app up -d`. Avoid deleting volumes, PVCs, the namespace,
+or the Minikube profile if their stored state is needed. Kafka/ZooKeeper storage is
+ephemeral in the current demo: broker replacement can require topic recreation and
+source replay, even though Postgres, Redis, and model-artifact volumes persist.
+
+## Retraining and production boundary
+
+Saving a label does not immediately change the model. Monitoring needs sufficient
+traffic and checks its configured drift rule. The small Minikube node schedules
+report-only monitoring; full CPU retraining exhausted its memory during the
+November 1 resume. Run training separately in a configured host/GPU environment
+using the README workflow. Monitoring with `--retrain` may train a challenger. Only a
+challenger passing the validation improvement gate becomes champion. Scorers check
+for alias changes periodically on requests. Demo labels are excluded; current
+feedback training eligibility is limited to original training-period IDs. Expanding
+the training window to new business data still requires implementation and evaluation.
+
+This demo has no production user authentication, TLS access layer, high availability,
+durable broker setup, or remote backup/restore policy. A real deployment needs those
+controls, representative model validation, tested traffic capacity, protected secrets,
+and an explicit payment decision/failure policy before handling real transactions.
+
+Refer to `results.md` for measured evidence, `architecture.md` for guarantees and
+limits, and `presentation.md` for the ten-minute demonstration narrative.

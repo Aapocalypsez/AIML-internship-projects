@@ -1,0 +1,42 @@
+# Config
+SEED: 42
+PROJECT_NAME: fraud-detection
+
+# MLflow
+MLFLOW_TRACKING_URI: http://localhost:5000
+
+# Kafka
+KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+KAFKA_TOPIC_RAW: transactions.raw
+KAFKA_TOPIC_SCORED: transactions.scored
+KAFKA_TOPIC_ALERTS: alerts
+KAFKA_TOPIC_DLQ: transactions.dlq
+
+# Redis
+REDIS_HOST: 127.0.0.1
+REDIS_PORT: 6380
+
+# Postgres
+POSTGRES_HOST: localhost
+POSTGRES_PORT: 5433
+POSTGRES_USER: fraud
+POSTGRES_PASSWORD: fraud_dev
+POSTGRES_DB: fraud_detection
+
+# Feast
+FEAST_REPO_PATH: ./feature_repo
+
+# Model
+MODEL_BLEND_WEIGHT_XGBOOST: 0.7
+MODEL_BLEND_WEIGHT_GNN: 0.3
+
+# SLA
+SCORING_SLA_P99_MS: 100
+SCORING_SLA_P95_MS: 50
+
+# Training
+TRAIN_RATIO: 0.6
+VAL_RATIO: 0.2
+TEST_RATIO: 0.2
+RANDOM_SEED: 42
+N_TUNING_TRIALS: 20

@@ -1,0 +1,16 @@
+<template>
+<style>
+#root{position:absolute;inset:0;background:#F1F5F6;color:#163441;font-family:Inter,sans-serif}
+#mask-screen{position:absolute;left:100px;top:140px;right:auto;bottom:auto;width:1000px;height:760px;object-fit:contain}
+#mask-words{position:absolute;left:1170px;top:250px;right:auto;bottom:auto;width:550px;height:auto}
+#mask-title{font-size:62px;line-height:1.12;font-weight:700;margin:0 0 38px}
+#mask-detail{font-size:36px;line-height:1.35;margin:0;color:#375661}
+#mask-notice{position:absolute;left:195px;top:930px;right:auto;bottom:auto;width:1530px;height:40px;font-size:28px;line-height:1.3;color:#375661}
+</style>
+<div id="root" data-composition-id="mask" data-width="1920" data-height="1080" data-hold="Read the genuine application screen and its explanation">
+<img id="mask-screen" class="clip" data-start="0" data-duration="12" src="assets/06-ct-overlay.jpg" alt="Actual local Lumen application capture"/>
+<div id="mask-words" class="clip" data-start="0" data-duration="12"><h1 id="mask-title">Inspect imperfect masks.</h1><p id="mask-detail">A working viewer does not guarantee accurate anatomy.</p></div>
+<div id="mask-notice" class="clip" data-start="0" data-duration="12">For education only, not clinical use. Captioned walkthrough from actual application captures.</div>
+</div>
+<script>const tl=gsap.timeline({paused:true});tl.fromTo('#mask-words',{opacity:0,x:18},{opacity:1,x:0,duration:.4,ease:'power3.out'},.2);window.__timelines['mask']=tl;</script>
+</template>

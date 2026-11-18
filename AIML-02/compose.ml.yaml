@@ -1,0 +1,18 @@
+services:
+  api:
+    image: lumen-inference:local
+    build:
+      args:
+        INSTALL_ML: "true"
+    environment:
+      DATA_DIR: ${LUMEN_DATA_DIR:-/app/data/runtime}
+      CLASSIFIER_CHECKPOINT: /app/models/active/classifier.pt
+      SEGMENTATION_CHECKPOINT: /app/models/active/spleen.pt
+      REVIEW_USERS_FILE: /app/data/auth/users.json
+    volumes:
+      - ./models:/app/models:ro
+      - ./data/auth:/app/data/auth:ro
+  importer:
+    environment:
+      API_REVIEW_USERNAME: ${API_REVIEW_USERNAME:?Create local service account first}
+      API_REVIEW_PASSWORD: ${API_REVIEW_PASSWORD:?Create local service account first}

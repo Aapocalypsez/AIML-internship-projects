@@ -1,0 +1,44 @@
+[
+  {
+    "scene": "sign-in",
+    "capture": "reports\\demo-assets\\01-sign-in.jpg",
+    "method": "Actual local application screenshot; paced still sequence, not continuous screen recording",
+    "seconds": 12
+  },
+  {
+    "scene": "upload",
+    "capture": "reports\\demo-assets\\03-xray-upload.jpg",
+    "method": "Actual local application screenshot; paced still sequence, not continuous screen recording",
+    "seconds": 12
+  },
+  {
+    "scene": "explain",
+    "capture": "reports\\demo-assets\\04-xray-output.jpg",
+    "method": "Actual local application screenshot; paced still sequence, not continuous screen recording",
+    "seconds": 12
+  },
+  {
+    "scene": "volume",
+    "capture": "reports\\demo-assets\\05-ct-slices.jpg",
+    "method": "Actual local application screenshot; paced still sequence, not continuous screen recording",
+    "seconds": 12
+  },
+  {
+    "scene": "mask",
+    "capture": "reports\\demo-assets\\06-ct-overlay.jpg",
+    "method": "Actual local application screenshot; paced still sequence, not continuous screen recording",
+    "seconds": 12
+  },
+  {
+    "scene": "review",
+    "capture": "reports\\demo-assets\\07-review-history.jpg",
+    "method": "Actual local application screenshot; paced still sequence, not continuous screen recording",
+    "seconds": 12
+  },
+  {
+    "scene": "results",
+    "capture": "reports\\demo-assets\\08-results.jpg",
+    "method": "Actual local application screenshot; paced still sequence, not continuous screen recording",
+    "seconds": 12
+  }
+]

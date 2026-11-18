@@ -1,0 +1,19 @@
+stages:
+  classifier:
+    cmd: python -m ml.train_classifier --manifest data/splits/classifier.csv
+    deps:
+      - data/splits/classifier.csv
+      - data/raw/chexpert/extracted
+      - ml/classifier.py
+      - ml/train_classifier.py
+    outs:
+      - models/classifier
+  spleen:
+    cmd: python -m ml.train_segmentation --manifest data/splits/spleen.json
+    deps:
+      - data/splits/spleen.json
+      - data/raw/spleen/extracted/Task09_Spleen
+      - ml/segmentation.py
+      - ml/train_segmentation.py
+    outs:
+      - models/spleen

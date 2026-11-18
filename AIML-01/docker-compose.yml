@@ -1,0 +1,277 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.3
+    container_name: fraud-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+    - 2181:2181
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - 'echo srvr | nc -w 3 localhost 2181 | grep Mode:'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  kafka:
+    image: confluentinc/cp-kafka:7.5.3
+    container_name: fraud-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+    - 9092:9092
+    - 29092:29092
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_HEAP_OPTS: -Xms128m -Xmx256m
+    healthcheck:
+      test:
+      - CMD
+      - kafka-topics
+      - --bootstrap-server
+      - localhost:9092
+      - --list
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+  redis:
+    image: redis:7.2-alpine
+    container_name: fraud-redis
+    ports:
+    - 6380:6379
+    healthcheck:
+      test:
+      - CMD
+      - redis-cli
+      - ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command:
+    - redis-server
+    - --appendonly
+    - 'yes'
+    volumes:
+    - redis_data:/data
+  postgres:
+    image: postgres:16-alpine
+    container_name: fraud-postgres
+    environment:
+      POSTGRES_USER: fraud
+      POSTGRES_PASSWORD: fraud_dev
+      POSTGRES_DB: fraud_detection
+    ports:
+    - 5433:5432
+    volumes:
+    - postgres_data:/var/lib/postgresql/data
+    - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U fraud
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  mlflow:
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+      target: runtime
+    image: fraud-platform:local
+    container_name: fraud-mlflow
+    command: mlflow server --backend-store-uri postgresql://fraud:fraud_dev@postgres:5432/fraud_detection
+      --default-artifact-root mlflow-artifacts:/ --artifacts-destination /mlartifacts
+      --host 0.0.0.0 --port 5000 --workers 1
+    ports:
+    - 5000:5000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    volumes:
+    - mlflow_artifacts:/mlartifacts
+  api:
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+      target: runtime
+    image: fraud-platform:local
+    profiles:
+    - app
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      SCORER_URL: http://api:8000
+      STATE_NAMESPACE: fraud:compose
+      PYTHONUTF8: '1'
+      FEAST_USAGE: 'False'
+    volumes:
+    - ./data:/app/data
+    - ./feature_repo/data:/app/feature_repo/data
+    depends_on:
+      mlflow:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    command:
+    - python
+    - -m
+    - uvicorn
+    - src.serving.app:app
+    - --host
+    - 0.0.0.0
+    - --port
+    - '8000'
+    ports:
+    - 127.0.0.1:8000:8000
+  worker:
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+      target: runtime
+    image: fraud-platform:local
+    profiles:
+    - app
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      SCORER_URL: http://api:8000
+      STATE_NAMESPACE: fraud:compose
+      PYTHONUTF8: '1'
+      FEAST_USAGE: 'False'
+    volumes:
+    - ./data:/app/data
+    - ./feature_repo/data:/app/feature_repo/data
+    depends_on:
+      mlflow:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    command:
+    - python
+    - -m
+    - src.streaming.worker
+  sink:
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+      target: runtime
+    image: fraud-platform:local
+    profiles:
+    - app
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      SCORER_URL: http://api:8000
+      STATE_NAMESPACE: fraud:compose
+      PYTHONUTF8: '1'
+      FEAST_USAGE: 'False'
+    volumes:
+    - ./data:/app/data
+    - ./feature_repo/data:/app/feature_repo/data
+    depends_on:
+      mlflow:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    command:
+    - python
+    - -m
+    - src.streaming.sink
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+      target: runtime
+    image: fraud-platform:local
+    profiles:
+    - app
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      SCORER_URL: http://api:8000
+      STATE_NAMESPACE: fraud:compose
+      PYTHONUTF8: '1'
+      FEAST_USAGE: 'False'
+    volumes:
+    - ./data:/app/data
+    - ./feature_repo/data:/app/feature_repo/data
+    depends_on:
+      mlflow:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    command:
+    - python
+    - -m
+    - streamlit
+    - run
+    - src/dashboard/app.py
+    - --server.address
+    - 0.0.0.0
+    - --server.headless
+    - 'true'
+    - --browser.gatherUsageStats
+    - 'false'
+    ports:
+    - 127.0.0.1:8501:8501
+volumes:
+  postgres_data: null
+  redis_data:
+    name: fraud-redis-data
+  mlflow_artifacts:
+    name: fraud-mlflow-artifacts
