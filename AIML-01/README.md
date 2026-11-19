@@ -1,4 +1,4 @@
-# 🔍 Real-Time Financial Fraud Detection Platform
+#  Real-Time Financial Fraud Detection Platform
 
 A local, end-to-end ML platform that ingests financial transactions through Kafka, engineers leakage-safe features, scores them in real time with XGBoost, and surfaces predictions through an interactive Streamlit dashboard. Includes Feast feature serving, MLflow model versioning, Evidently drift monitoring, a training-only GraphSAGE experiment, and Kubernetes deployment on Minikube.
 
@@ -6,7 +6,7 @@ A local, end-to-end ML platform that ingests financial transactions through Kafk
 
 ---
 
-## 📊 Key Results
+##  Key Results
 
 | Metric | Value |
 |--------|-------|
@@ -20,7 +20,7 @@ The GraphSAGE GNN experiment showed no ranking gain over XGBoost alone. This is 
 
 ---
 
-## 🏗️ Architecture
+##  Architecture
 
 ```
 Kafka Producer → Kafka Broker → Streaming Worker → FastAPI Scorer → Postgres
@@ -36,13 +36,13 @@ Kafka Producer → Kafka Broker → Streaming Worker → FastAPI Scorer → Post
 
 ---
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 `Python 3.11` · `Apache Kafka` · `Redis` · `PostgreSQL` · `XGBoost` · `PyTorch Geometric (GraphSAGE)` · `Feast` · `MLflow` · `FastAPI` · `Streamlit` · `Evidently AI` · `Docker Compose` · `Minikube`
 
 ---
 
-## ⚡ Quick Start (Windows)
+##  Quick Start (Windows)
 
 **Prerequisites:** Python 3.11, Docker Desktop (Linux-container mode), NVIDIA GPU recommended.
 
@@ -71,7 +71,7 @@ Host ports: Redis **6380**, Postgres **5433**, Kafka **9092**, MLflow **5000**. 
 
 ---
 
-## 🧠 Training Pipeline
+##  Training Pipeline
 
 ```powershell
 # Train baseline XGBoost
@@ -93,7 +93,7 @@ Use `--device cpu` if CUDA is unavailable. The graph job registers its calibrate
 
 ---
 
-## 🚀 Running the Application
+##  Running the Application
 
 ```powershell
 # Start all application services
@@ -120,7 +120,7 @@ For host-mode development, run services in separate terminals:
 
 ---
 
-## ✅ Testing & Verification
+##  Testing & Verification
 
 ```powershell
 # Full test suite (set FRAUD_TEST_REDIS=1 for Redis integration tests)
@@ -142,7 +142,7 @@ The integration script uses isolated topics and reserved IDs, verifies duplicate
 
 ---
 
-## ☸️ Minikube Deployment
+##  Minikube Deployment
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/k8s_up.ps1
@@ -156,7 +156,7 @@ The script builds and loads images, copies the local dataset and model artifacts
 
 ---
 
-## 📋 Documentation
+##  Documentation
 
 | Document | Description |
 |----------|-------------|
@@ -171,7 +171,7 @@ The script builds and loads images, copies the local dataset and model artifacts
 
 ---
 
-## 📂 Project Structure
+##  Project Structure
 
 ```
 ├── src/
