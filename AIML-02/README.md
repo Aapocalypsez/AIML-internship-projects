@@ -1,12 +1,12 @@
-# 🏥 Lumen — AI-Assisted Medical Imaging and Diagnosis System
+#  Lumen — AI-Assisted Medical Imaging and Diagnosis System
 
 A full-stack research application for **chest X-ray classification** and **CT spleen segmentation** with an authenticated reviewer workflow, Grad-CAM explanations, and DICOM support via Orthanc.
 
-> ⚠️ **For education only, not clinical use.** See [MODEL_CARD.md](docs/MODEL_CARD.md) for intended use and known limitations.
+>  **For education only, not clinical use.** See [MODEL_CARD.md](docs/MODEL_CARD.md) for intended use and known limitations.
 
 ---
 
-## 📊 Key Results
+##  Key Results
 
 ### Chest X-ray Classification (DenseNet-121)
 
@@ -32,7 +32,7 @@ Full measured evidence is in [RESULTS.md](docs/RESULTS.md). No accuracy figures 
 
 ---
 
-## 🏗️ Architecture
+##  Architecture
 
 ```
 React Viewer → FastAPI Backend → SQLite (Studies + Reviews)
@@ -48,26 +48,26 @@ React Viewer → FastAPI Backend → SQLite (Studies + Reviews)
 
 ---
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 `Python 3.12` · `React` · `TypeScript` · `FastAPI` · `PyTorch` · `MONAI` · `DenseNet-121` · `U-Net` · `Grad-CAM` · `SQLite` · `Docker` · `Orthanc DICOM` · `DVC`
 
 ---
 
-## ⚡ Features
+##  Features
 
-- 🩻 **Multi-modal input:** PNG, JPEG, single-frame DICOM (DX/CR), NIfTI CT volumes, and complete classic CT DICOM ZIP series
-- 🔬 **Per-finding Grad-CAM** heatmap explanations with adjustable opacity
-- 📐 **Platt calibration** — validation-fitted probability estimates with bootstrap confidence intervals
-- 👤 **Authenticated reviewer workflow** with append-only audit trail and decision history
-- 📊 **Subgroup analysis** by recorded sex and age
-- 🧪 **Content deduplication** — repeated uploads are detected and linked, not reprocessed
-- 🐳 **Pinned Docker containers** with Orthanc integration for DICOM management
-- 🎯 **Synthetic demo mode** — clearly labeled synthetic illustrations for exercising the workflow without model weights
+-  **Multi-modal input:** PNG, JPEG, single-frame DICOM (DX/CR), NIfTI CT volumes, and complete classic CT DICOM ZIP series
+-  **Per-finding Grad-CAM** heatmap explanations with adjustable opacity
+-  **Platt calibration** — validation-fitted probability estimates with bootstrap confidence intervals
+-  **Authenticated reviewer workflow** with append-only audit trail and decision history
+-  **Subgroup analysis** by recorded sex and age
+-  **Content deduplication** — repeated uploads are detected and linked, not reprocessed
+-  **Pinned Docker containers** with Orthanc integration for DICOM management
+-  **Synthetic demo mode** — clearly labeled synthetic illustrations for exercising the workflow without model weights
 
 ---
 
-## 🚀 Quick Start
+##  Quick Start
 
 **Prerequisites:** Python 3.12, Node.js, Docker Desktop (for Orthanc), NVIDIA GPU recommended for segmentation.
 
@@ -107,7 +107,7 @@ npm.cmd ci
 
 ---
 
-## 🧠 Training & Model Setup
+##  Training & Model Setup
 
 See [DATA_AND_MODELS.md](docs/DATA_AND_MODELS.md) for dataset preparation, training procedures, and evaluation policy. Use only authorized, de-identified data. Keep data and weights outside Git.
 
@@ -124,7 +124,7 @@ X-ray serving uses CPU; segmentation uses CUDA when available. Set `INFERENCE_DE
 
 ---
 
-## ✅ Testing
+##  Testing
 
 ```powershell
 New-Item -ItemType Directory -Force data | Out-Null
@@ -138,7 +138,7 @@ Pytest clears its `--basetemp` directory on each run — never point it at a dir
 
 ---
 
-## 🐳 Docker / Orthanc Deployment
+##  Docker / Orthanc Deployment
 
 Start Docker Desktop, then prepare credentials and launch the model-enabled stack:
 
@@ -154,7 +154,7 @@ Base-image digests and dependency versions are pinned. The lightweight base Comp
 
 ---
 
-## 📋 Documentation
+##  Documentation
 
 | Document | Description |
 |----------|-------------|
@@ -167,7 +167,7 @@ Base-image digests and dependency versions are pinned. The lightweight base Comp
 
 ---
 
-## 📂 Project Structure
+##  Project Structure
 
 ```
 ├── backend/           # FastAPI application and inference engine
@@ -186,6 +186,6 @@ Base-image digests and dependency versions are pinned. The lightweight base Comp
 
 ---
 
-## 🔒 Security Notes
+##  Security Notes
 
 The application uses account sessions, roles, origin checks, and sign-in rate limits. Account identity does not establish medical qualifications. For remote shared use, additional configuration is required (HTTPS with `COOKIE_SECURE=true`, explicit allowed origins, and further security review). DICOM/NIfTI text metadata is discarded by the API, but burned-in identifiers are not removed.
