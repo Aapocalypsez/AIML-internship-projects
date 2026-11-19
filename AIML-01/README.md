@@ -1,83 +1,115 @@
-# Real-time financial fraud detection
+# 🔍 Real-Time Financial Fraud Detection Platform
 
-A local, measured prototype: Kafka transaction replay, XGBoost scoring, a training-only
-GraphSAGE account graph, Feast/Redis, MLflow versioning, a Streamlit analyst desk,
-and Evidently-triggered challenger evaluation. See [results](docs/results.md) for
-actual measurements and limitations; this is not a production banking service.
+A local, end-to-end ML platform that ingests financial transactions through Kafka, engineers leakage-safe features, scores them in real time with XGBoost, and surfaces predictions through an interactive Streamlit dashboard. Includes Feast feature serving, MLflow model versioning, Evidently drift monitoring, a training-only GraphSAGE experiment, and Kubernetes deployment on Minikube.
 
-## Windows setup
+> See [results](docs/results.md) for actual measurements and limitations. This is a research prototype, not a production banking service.
 
-Use Python 3.11 and Docker Desktop in Linux-container mode. Download the IEEE-CIS
-`train_transaction.csv` and `train_identity.csv` from Kaggle into `data/raw/`.
-Data, generated models, feature stores and reports are ignored by Git.
+---
+
+## 📊 Key Results
+
+| Metric | Value |
+|--------|-------|
+| **Test PR-AUC** | 0.4743 (13.4× lift over random) |
+| **Scoring Latency (p99)** | 72 ms |
+| **Online/Offline Feature Parity** | max error 5.68e-13 |
+| **Tests** | 44 passed, 2 skipped (Redis-dependent) |
+| **Dataset** | IEEE-CIS Fraud Detection (590K transactions, 3.5% fraud rate) |
+
+The GraphSAGE GNN experiment showed no ranking gain over XGBoost alone. This is documented honestly in the results rather than hidden.
+
+---
+
+## 🏗️ Architecture
+
+```
+Kafka Producer → Kafka Broker → Streaming Worker → FastAPI Scorer → Postgres
+                                       ↓                 ↓
+                                  Feast (Redis)      Streamlit Dashboard
+                                       ↓
+                                  XGBoost + GNN → MLflow Registry
+                                       ↓
+                                  Evidently Drift Monitor
+```
+
+**Services:** Kafka, ZooKeeper, Redis, PostgreSQL, MLflow, FastAPI, Streamlit, Evidently — orchestrated via Docker Compose or Minikube (9 services).
+
+---
+
+## 🛠️ Tech Stack
+
+`Python 3.11` · `Apache Kafka` · `Redis` · `PostgreSQL` · `XGBoost` · `PyTorch Geometric (GraphSAGE)` · `Feast` · `MLflow` · `FastAPI` · `Streamlit` · `Evidently AI` · `Docker Compose` · `Minikube`
+
+---
+
+## ⚡ Quick Start (Windows)
+
+**Prerequisites:** Python 3.11, Docker Desktop (Linux-container mode), NVIDIA GPU recommended.
+
+1. **Download the dataset** — get IEEE-CIS `train_transaction.csv` and `train_identity.csv` from Kaggle and place them in `data/raw/`.
+
+2. **Set up the environment:**
 
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r docker/requirements-runtime.txt
 .\.venv\Scripts\python.exe -m pip install pytest==8.4.2 ruff==0.17.3
-# CPU graph dependencies; the graph Docker image uses these versions too.
+
+# CPU graph dependencies (optional, for GNN experiment)
 .\.venv\Scripts\python.exe -m pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
 .\.venv\Scripts\python.exe -m pip install torch-geometric==2.5.3
+```
 
+3. **Start infrastructure:**
+
+```powershell
 docker compose up -d
 .\.venv\Scripts\python.exe scripts/health_check.py
 ```
 
-The measured host graph run used the versions in its evidence report; repeated
-training on a different PyTorch version may vary slightly. Scoring uses the
-saved XGBoost bundle and frozen account scores, so it does not require PyTorch.
-The current tested runtime versions are pinned in `docker/requirements-runtime.txt`.
+Host ports: Redis **6380**, Postgres **5433**, Kafka **9092**, MLflow **5000**. These avoid conflicts with existing Windows services; container-internal ports remain 6379/5432.
 
-Host Redis is **6380**, Postgres **5433**, Kafka **9092**, MLflow **5000**.
-These host ports avoid existing Windows services; internal container ports remain
-6379 and 5432. Development credentials are in config.yaml and can be overridden
-by environment variables with the same names. Run modules from the project root.
+---
 
-## First model on a fresh clone
-
-The historical baseline MLflow run is specific to the original local database.
-On a fresh database, reproduce it and log the actual results rather than using
-the earlier script containing copied baseline metrics.
+## 🧠 Training Pipeline
 
 ```powershell
-# Optional SHAP analysis for the original baseline trainer:
-.\.venv\Scripts\python.exe -m pip install shap
+# Train baseline XGBoost
 .\.venv\Scripts\python.exe -X utf8 -m src.training.train_baseline
-# Obtain that actual baseline run ID from MLflow, then pass it here:
+
+# Train with Feast features (pass the baseline MLflow run ID)
 .\.venv\Scripts\python.exe -X utf8 -m src.training.train_with_features --baseline-run-id YOUR_RUN_ID --device cuda
+
+# Materialize features and validate parity
 .\.venv\Scripts\python.exe -X utf8 -m scripts.materialize_features
 .\.venv\Scripts\python.exe -X utf8 -m scripts.verify_feature_parity
 .\.venv\Scripts\python.exe -X utf8 -m src.training.matrices
+
+# Graph experiment (optional)
 .\.venv\Scripts\python.exe -X utf8 -m src.graph.train
 ```
 
-Use `--device cpu` if CUDA-enabled XGBoost is unavailable. CPU full-data training
-can be slow on this laptop. Only validation is used for early stopping/selection.
-The graph job registers its calibrated, evaluated bundle as `fraud-detector@champion`
-after its feature snapshots are materialized. Validation may select zero GNN weight.
+Use `--device cpu` if CUDA is unavailable. The graph job registers its calibrated bundle as `fraud-detector@champion`. Validation may select zero GNN weight (this happened in practice). If continuing an existing checkout, the trained model and snapshots already exist.
 
-If continuing this existing checkout, the evaluated model, snapshots and champion
-already exist: do not redo the baseline or training to start the application.
-`src.training.registry` can bootstrap an XGBoost-only champion from the saved Phase 2
-model; `scripts.bootstrap_runtime` can initialize a fresh deployment from saved artifacts.
+---
 
-## Run the application
+## 🚀 Running the Application
 
 ```powershell
-# All application services, with persistent Redis/Postgres/MLflow volumes:
+# Start all application services
 docker compose --profile app up -d
-# Send transactions through the full workflow:
+
+# Replay transactions through the pipeline
 .\.venv\Scripts\python.exe -X utf8 -m src.streaming.producer --limit 1000 --speed 1000
 ```
 
-Open the dashboard at http://127.0.0.1:8501 and API docs at http://127.0.0.1:8000/docs.
-The API's direct `/score` route returns predictions; only the Kafka path publishes
-results to the analyst workflow. `--speed 0` replays as fast as possible.
-`--drift` multiplies transaction amounts by ten for a controlled shift. Replaying
-modified payloads under an existing TransactionID is deliberately rejected; use a
-fresh demo namespace/topic set or the verification scripts for isolated demonstrations.
+- **Dashboard:** http://127.0.0.1:8501
+- **API Docs:** http://127.0.0.1:8000/docs
+- **MLflow UI:** http://127.0.0.1:5000
 
-For host development, start the API, worker, sink and dashboard in separate terminals:
+The `--speed 0` flag replays as fast as possible. Use `--drift` to multiply amounts by 10× for a controlled distribution shift.
+
+For host-mode development, run services in separate terminals:
 
 ```powershell
 .\.venv\Scripts\python.exe -X utf8 -m uvicorn src.serving.app:app --host 127.0.0.1 --port 8000
@@ -86,70 +118,74 @@ For host development, start the API, worker, sink and dashboard in separate term
 .\.venv\Scripts\python.exe -X utf8 -m streamlit run src/dashboard/app.py --server.address 127.0.0.1
 ```
 
-Do not run host and container API/dashboard processes on the same ports together.
+---
 
-## Verify and demonstrate
+## ✅ Testing & Verification
 
 ```powershell
+# Full test suite (set FRAUD_TEST_REDIS=1 for Redis integration tests)
 $env:FRAUD_TEST_REDIS='1'
 .\.venv\Scripts\python.exe -X utf8 -m pytest tests/ -q --junitxml=data/processed/integration/tests.xml
 .\.venv\Scripts\python.exe -m ruff check src/ scripts/ tests/ feature_repo
+
+# End-to-end pipeline verification
 .\.venv\Scripts\python.exe -X utf8 -m scripts.verify_pipeline --count 1000
 .\.venv\Scripts\python.exe -X utf8 -m scripts.load_test --count 1000
 .\.venv\Scripts\python.exe -X utf8 -m scripts.verify_online_parity
+
+# Drift detection demo
 .\.venv\Scripts\python.exe -X utf8 -m scripts.demo_drift --device cuda
 .\.venv\Scripts\python.exe -X utf8 -m src.monitoring.run --retrain --device cuda
 ```
 
-The integration script uses isolated topics and reserved IDs, verifies one duplicate
-and one invalid message, and records database/feedback/latency evidence. The drift
-demo is injected data, not a claim that production drift occurred. It trains a real
-challenger and preserves the champion unless the validation gate passes. Demo labels
-are excluded from training. Detailed commands and expected screens: [demo guide](docs/demo.md).
+The integration script uses isolated topics and reserved IDs, verifies duplicate rejection and invalid message handling, and records latency evidence. The drift demo injects modified data — it trains a real challenger model and preserves the champion unless the validation gate passes.
 
-## Minikube
+---
 
-Install Minikube from its official site, or use the verified project-local
-`data/tools/minikube.exe` already downloaded in this checkout.
+## ☸️ Minikube Deployment
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/k8s_up.ps1
-# Equivalent when GNU Make is available: make k8s-up
+
 kubectl --context fraud-demo -n fraud get pods,jobs,cronjobs
 kubectl --context fraud-demo -n fraud port-forward service/api 8001:8000
-# In another terminal:
 kubectl --context fraud-demo -n fraud port-forward service/dashboard 8502:8501
 ```
 
-The script builds/loads images, copies the local dataset and evaluated artifacts into
-an isolated Docker-driver node, applies the manifests, then waits for bootstrap and
-application readiness. It does not retrain the baseline during deployment. The first
-image load can be slow. Stop unused host/Compose app processes on a 16 GB machine.
-Persistent volumes are local to the `fraud-demo` node, not a remote backup.
-Kafka/ZooKeeper storage is ephemeral in this demo; broker replacement requires
-recreating topics and replaying source transactions. Database, Redis and model
-artifacts have persistent volumes.
-The hourly `drift-retraining` CronJob generates drift reports and waits for its
-dependencies on startup. Full CPU retraining exhausted the 4 GiB node during the
-November 1 resume, so this scheduled command omits `--retrain`. Run challenger
-training separately in a configured host/GPU environment; the validation promotion
-gate remains in place. Do not resume the suspended `drift-resume-20261101` Job
-beside the interactive services on this node.
-To stop while retaining data, use `minikube stop -p fraud-demo` (or the project-local
-executable). Deleting the namespace or PVCs can delete the cluster database and
-artifacts; the host-side source artifacts are retained separately.
+The script builds and loads images, copies the local dataset and model artifacts into an isolated node, and applies the manifests. Stop unused host/Compose processes on a 16 GB machine.
 
-## Documentation
+---
 
-- [Current demonstration: your next steps](docs/next_steps.md)
-- [Using the application and handing it over](docs/use_and_handover.md)
-- [Architecture and guarantees](docs/architecture.md)
-- [Measured results and source artifacts](docs/results.md)
-- [Feature rules and Feast reproduction](docs/features.md)
-- [Decisions](docs/decisions.md)
-- [Demo guide](docs/demo.md)
-- [Ten-minute presentation outline](docs/presentation.md)
-- [Dataset dictionary](docs/data_dictionary.md)
+## 📋 Documentation
 
-Key folders: `src/serving`, `src/streaming`, `src/graph`, `src/dashboard`,
-`src/monitoring`, `src/training`, `feature_repo`, `k8s`, `tests`, `scripts`.
+| Document | Description |
+|----------|-------------|
+| [Architecture](docs/architecture.md) | System design, components, and data flow |
+| [Results](docs/results.md) | Measured metrics, artifacts, and limitations |
+| [Features](docs/features.md) | Feature engineering rules and Feast setup |
+| [Decisions](docs/decisions.md) | Design choices and trade-offs |
+| [Demo Guide](docs/demo.md) | Step-by-step demonstration walkthrough |
+| [Reflection](docs/reflection.md) | Personal reflections on the project |
+| [Presentation](docs/presentation.md) | Ten-minute presentation outline |
+| [Data Dictionary](docs/data_dictionary.md) | Dataset column descriptions |
+
+---
+
+## 📂 Project Structure
+
+```
+├── src/
+│   ├── serving/       # FastAPI scoring endpoint
+│   ├── streaming/     # Kafka producer, worker, sink
+│   ├── graph/         # GraphSAGE GNN experiment
+│   ├── dashboard/     # Streamlit analyst interface
+│   ├── monitoring/    # Evidently drift detection
+│   └── training/      # XGBoost + feature engineering
+├── feature_repo/      # Feast feature definitions
+├── k8s/               # Kubernetes manifests
+├── tests/             # Pytest test suite
+├── scripts/           # Verification and utility scripts
+├── docker/            # Dockerfiles and requirements
+├── docs/              # Architecture, results, guides
+└── notebooks/         # EDA and analysis notebooks
+```
